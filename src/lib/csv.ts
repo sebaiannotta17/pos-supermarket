@@ -1,6 +1,5 @@
 import Papa from "papaparse";
-import type { Product, ProductInput, StockMovement } from "../types";
-import { MOVEMENT_REASON_LABEL, MOVEMENT_TYPE_LABEL } from "../types";
+import type { Product, ProductInput } from "../types";
 
 const PRODUCT_HEADERS = [
   "barcode",
@@ -8,8 +7,6 @@ const PRODUCT_HEADERS = [
   "category",
   "price",
   "cost",
-  "stock",
-  "minStock",
   "image",
 ] as const;
 
@@ -22,8 +19,6 @@ export function exportProductsCsv(products: Product[]): string {
       p.category,
       p.price,
       p.cost,
-      p.stock,
-      p.minStock,
       p.image ?? "",
     ]),
   });
@@ -65,8 +60,6 @@ export function parseProductsCsv(text: string): ParseProductsResult {
       category: (raw.category ?? "Sin categoría").trim() || "Sin categoría",
       price: parseNumber(raw.price),
       cost: parseNumber(raw.cost),
-      stock: Math.floor(parseNumber(raw.stock)),
-      minStock: Math.floor(parseNumber(raw.minStock)),
       image: (raw.image ?? "").trim() || undefined,
     });
   });
@@ -81,38 +74,11 @@ function parseNumber(value: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function exportMovementsCsv(movements: StockMovement[]): string {
-  return Papa.unparse({
-    fields: [
-      "id",
-      "createdAt",
-      "type",
-      "reason",
-      "productBarcode",
-      "productName",
-      "quantity",
-      "balanceBefore",
-      "balanceAfter",
-      "unitCost",
-      "note",
-    ],
-    data: movements.map((m) => [
-      m.id,
-      m.createdAt,
-      MOVEMENT_TYPE_LABEL[m.type],
-      MOVEMENT_REASON_LABEL[m.reason],
-      m.productBarcode,
-      m.productName,
-      m.quantity,
-      m.balanceBefore,
-      m.balanceAfter,
-      m.unitCost ?? "",
-      m.note ?? "",
-    ]),
-  });
-}
-
-export function downloadFile(filename: string, content: string, mime = "text/csv") {
+export function downloadFile(
+  filename: string,
+  content: string,
+  mime = "text/csv"
+) {
   const blob = new Blob([`\uFEFF${content}`], { type: `${mime};charset=utf-8` });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -124,4 +90,4 @@ export function downloadFile(filename: string, content: string, mime = "text/csv
   URL.revokeObjectURL(url);
 }
 
-export const PRODUCT_CSV_TEMPLATE = `${PRODUCT_HEADERS.join(",")}\n7790000000001,Producto Ejemplo,Almacén,1500,1000,20,5,\n`;
+export const PRODUCT_CSV_TEMPLATE = `${PRODUCT_HEADERS.join(",")}\n7790000000001,Producto Ejemplo,Almacén,1500,1000,\n`;

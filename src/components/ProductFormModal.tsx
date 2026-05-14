@@ -18,8 +18,6 @@ export function ProductFormModal({ initial, onClose, onSubmit }: Props) {
           price: initial.price,
           cost: initial.cost,
           category: initial.category,
-          stock: initial.stock,
-          minStock: initial.minStock,
           image: initial.image ?? "",
         }
       : {
@@ -28,8 +26,6 @@ export function ProductFormModal({ initial, onClose, onSubmit }: Props) {
           price: 0,
           cost: 0,
           category: categories[0]?.name ?? "",
-          stock: 0,
-          minStock: 0,
           image: "",
         }
   );
@@ -158,40 +154,6 @@ export function ProductFormModal({ initial, onClose, onSubmit }: Props) {
                 className="input"
                 value={form.price}
                 onChange={(e) => handleChange("price", Number(e.target.value) || 0)}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="label" htmlFor="stock">
-                Stock actual
-              </label>
-              <input
-                id="stock"
-                type="number"
-                min={0}
-                step="1"
-                className="input"
-                value={form.stock}
-                onChange={(e) => handleChange("stock", Number(e.target.value) || 0)}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="label" htmlFor="minStock">
-                Stock mínimo (alerta)
-              </label>
-              <input
-                id="minStock"
-                type="number"
-                min={0}
-                step="1"
-                className="input"
-                value={form.minStock}
-                onChange={(e) =>
-                  handleChange("minStock", Number(e.target.value) || 0)
-                }
                 required
               />
             </div>

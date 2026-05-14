@@ -8,9 +8,6 @@ import type {
   CategoryInput,
   Product,
   ProductInput,
-  RecordMovementInput,
-  StockMovement,
-  StockStatus,
 } from "../types";
 
 type Feedback = {
@@ -21,7 +18,6 @@ type Feedback = {
 type InventoryState = {
   products: Product[];
   categories: Category[];
-  movements: StockMovement[];
   lastFeedback: Feedback | null;
 
   setFeedback: (f: Feedback | null) => void;
@@ -29,7 +25,6 @@ type InventoryState = {
 
   findByBarcode: (barcode: string) => Product | undefined;
   findById: (id: string) => Product | undefined;
-  getStockStatus: (product: Product) => StockStatus;
 
   addProduct: (input: ProductInput) => Product | { error: string };
   updateProduct: (
@@ -45,10 +40,6 @@ type InventoryState = {
   ) => Category | { error: string };
   deleteCategory: (id: string) => { error: string } | { ok: true };
 
-  recordMovement: (
-    input: RecordMovementInput
-  ) => StockMovement | { error: string };
-
   importProducts: (rows: ProductInput[]) => {
     inserted: number;
     updated: number;
@@ -63,7 +54,6 @@ export const useInventoryStore = create<InventoryState>()(
     (set, get) => ({
       products: MOCK_PRODUCTS,
       categories: DEFAULT_CATEGORIES,
-      movements: [],
       lastFeedback: null,
 
       setFeedback: (f) => set({ lastFeedback: f }),
@@ -76,12 +66,6 @@ export const useInventoryStore = create<InventoryState>()(
       },
 
       findById: (id) => get().products.find((p) => p.id === id),
-
-      getStockStatus: (p) => {
-        if (p.stock <= 0) return "out";
-        if (p.stock <= p.minStock) return "low";
-        return "ok";
-      },
 
       addProduct: (input) => {
         const validation = validateProduct(input);
@@ -97,8 +81,6 @@ export const useInventoryStore = create<InventoryState>()(
           price: Number(input.price) || 0,
           cost: Number(input.cost) || 0,
           category: input.category.trim() || "Sin categoría",
-          stock: Math.max(0, Math.floor(Number(input.stock) || 0)),
-          minStock: Math.max(0, Math.floor(Number(input.minStock) || 0)),
           image: input.image?.trim() || undefined,
         };
         set({ products: [product, ...get().products] });
@@ -127,8 +109,6 @@ export const useInventoryStore = create<InventoryState>()(
               price: Number(input.price) || 0,
               cost: Number(input.cost) || 0,
               category: input.category.trim() || "Sin categoría",
-              stock: Math.max(0, Math.floor(Number(input.stock) || 0)),
-              minStock: Math.max(0, Math.floor(Number(input.minStock) || 0)),
               image: input.image?.trim() || undefined,
             };
             return updated;
@@ -196,67 +176,6 @@ export const useInventoryStore = create<InventoryState>()(
         return { ok: true };
       },
 
-      recordMovement: (input) => {
-        const product = get().products.find((p) => p.id === input.productId);
-        if (!product) return { error: "Producto no encontrado." };
-        const balanceBefore = product.stock;
-        let delta: number;
-        let quantity = Math.abs(Math.floor(Number(input.quantity) || 0));
-
-        if (input.type === "in") {
-          if (quantity <= 0)
-            return { error: "La cantidad debe ser mayor a 0." };
-          delta = quantity;
-        } else if (input.type === "out") {
-          if (quantity <= 0)
-            return { error: "La cantidad debe ser mayor a 0." };
-          if (quantity > balanceBefore)
-            return {
-              error: `Stock insuficiente. Disponible: ${balanceBefore}.`,
-            };
-          delta = -quantity;
-        } else {
-          const target = Math.max(
-            0,
-            Math.floor(Number(input.newStock ?? 0))
-          );
-          delta = target - balanceBefore;
-          quantity = Math.abs(delta);
-          if (delta === 0)
-            return {
-              error: "El nuevo stock es igual al actual, no hay ajuste.",
-            };
-        }
-
-        const balanceAfter = balanceBefore + delta;
-        const movement: StockMovement = {
-          id: generateId("mov"),
-          createdAt: new Date().toISOString(),
-          productId: product.id,
-          productName: product.name,
-          productBarcode: product.barcode,
-          type: input.type,
-          quantity,
-          reason: input.reason,
-          note: input.note?.trim() || undefined,
-          unitCost:
-            input.type === "in" && input.unitCost && input.unitCost > 0
-              ? Number(input.unitCost)
-              : undefined,
-          balanceBefore,
-          balanceAfter,
-        };
-
-        set({
-          products: get().products.map((p) =>
-            p.id === product.id ? { ...p, stock: balanceAfter } : p
-          ),
-          movements: [movement, ...get().movements],
-        });
-
-        return movement;
-      },
-
       importProducts: (rows) => {
         let inserted = 0;
         let updated = 0;
@@ -296,21 +215,18 @@ export const useInventoryStore = create<InventoryState>()(
         return { inserted, updated, errors };
       },
 
-      resetAll: () => {
+      resetAll: () =>
         set({
           products: MOCK_PRODUCTS,
           categories: DEFAULT_CATEGORIES,
-          movements: [],
           lastFeedback: { kind: "success", message: "Datos restablecidos." },
-        });
-      },
+        }),
     }),
     {
-      name: "inventory-store-v2",
+      name: "inventory-catalog-v1",
       partialize: (state) => ({
         products: state.products,
         categories: state.categories,
-        movements: state.movements,
       }),
     }
   )
@@ -321,43 +237,33 @@ function validateProduct(input: ProductInput): string | null {
   if (!input.name.trim()) return "El nombre es obligatorio.";
   if (Number(input.price) < 0) return "El precio no puede ser negativo.";
   if (Number(input.cost) < 0) return "El costo no puede ser negativo.";
-  if (Number(input.stock) < 0) return "El stock no puede ser negativo.";
-  if (Number(input.minStock) < 0)
-    return "El stock mínimo no puede ser negativo.";
   return null;
 }
 
-/**
- * Derivamos KPIs con useMemo desde `products` (referencia estable en el store).
- * No usar un único selector que devuelva un objeto nuevo cada vez: React 19 +
- * useSyncExternalStore tratá eso como snapshot distinto siempre (#185 máxima profundidad).
- */
-export function useInventoryKpis() {
+export function useCatalogStats() {
   const products = useInventoryStore((s) => s.products);
+  const categories = useInventoryStore((s) => s.categories);
 
   return useMemo(() => {
-    const totalUnits = products.reduce((acc, p) => acc + p.stock, 0);
-    const inventoryValueByCost = products.reduce(
-      (acc, p) => acc + p.stock * p.cost,
-      0
-    );
-    const inventoryValueByPrice = products.reduce(
-      (acc, p) => acc + p.stock * p.price,
-      0
-    );
-    const lowStock = products.filter(
-      (p) => p.stock > 0 && p.stock <= p.minStock
-    );
-    const outOfStock = products.filter((p) => p.stock === 0);
+    const avgPrice =
+      products.length > 0
+        ? products.reduce((a, p) => a + p.price, 0) / products.length
+        : 0;
+    const avgMargin =
+      products.length > 0
+        ? products.reduce((a, p) => a + (p.price - p.cost), 0) / products.length
+        : 0;
+    const byCategory = [...categories].map((c) => ({
+      name: c.name,
+      count: products.filter((p) => p.category === c.name).length,
+    }));
+
     return {
       productsCount: products.length,
-      totalUnits,
-      inventoryValueByCost,
-      inventoryValueByPrice,
-      lowStockCount: lowStock.length,
-      outOfStockCount: outOfStock.length,
-      lowStock,
-      outOfStock,
+      categoriesCount: categories.length,
+      avgPrice,
+      avgMargin,
+      byCategory: byCategory.sort((a, b) => b.count - a.count),
     };
-  }, [products]);
+  }, [products, categories]);
 }
