@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ProductFormModal } from "../components/ProductFormModal";
 import { ProductImage } from "../components/ProductImage";
 import {
@@ -17,13 +17,128 @@ type ImportSummary = {
   errors: string[];
 } | null;
 
+function productToInput(
+  p: Product,
+  patch: Partial<Pick<ProductInput, "price" | "stock">>
+): ProductInput {
+  return {
+    barcode: p.barcode,
+    name: p.name,
+    category: p.category,
+    price: patch.price ?? p.price,
+    cost: p.cost,
+    stock: patch.stock ?? p.stock,
+    minStock: p.minStock,
+    image: p.image ?? "",
+  };
+}
+
+function InlinePriceField({ product }: { product: Product }) {
+  const updateProduct = useInventoryStore((s) => s.updateProduct);
+  const setFeedback = useInventoryStore((s) => s.setFeedback);
+  const [str, setStr] = useState(() => String(product.price));
+
+  const commit = () => {
+    const normalized = str.replace(/\s/g, "").replace(",", ".");
+    const n = Number(normalized);
+    if (!Number.isFinite(n) || n < 0) {
+      setStr(String(product.price));
+      setFeedback({ kind: "warning", message: "Precio inválido." });
+      return;
+    }
+    if (Math.abs(n - product.price) < 0.005) {
+      setStr(String(product.price));
+      return;
+    }
+    const result = updateProduct(product.id, productToInput(product, { price: n }));
+    if ("error" in result) {
+      setStr(String(product.price));
+      setFeedback({ kind: "error", message: result.error });
+      return;
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      title="Enter o clic afuera para guardar"
+      aria-label={`Precio de ${product.name}`}
+      className="w-full min-w-[6.5rem] max-w-[9rem] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-sm font-semibold text-slate-800 tabular-nums shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 ml-auto block"
+      value={str}
+      onChange={(e) => setStr(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+        if (e.key === "Escape") {
+          setStr(String(product.price));
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
+  );
+}
+
+function InlineStockField({ product }: { product: Product }) {
+  const updateProduct = useInventoryStore((s) => s.updateProduct);
+  const setFeedback = useInventoryStore((s) => s.setFeedback);
+  const [str, setStr] = useState(() => String(product.stock));
+
+  const commit = () => {
+    const n = Math.floor(Number(str.replace(/\s/g, "").replace(",", ".")));
+    if (!Number.isFinite(n) || n < 0) {
+      setStr(String(product.stock));
+      setFeedback({ kind: "warning", message: "Stock inválido." });
+      return;
+    }
+    if (n === product.stock) {
+      setStr(String(product.stock));
+      return;
+    }
+    const result = updateProduct(product.id, productToInput(product, { stock: n }));
+    if ("error" in result) {
+      setStr(String(product.stock));
+      setFeedback({ kind: "error", message: result.error });
+      return;
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      title="Enter o clic afuera para guardar"
+      aria-label={`Stock de ${product.name}`}
+      className="w-full min-w-[3.25rem] max-w-[5rem] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-sm font-semibold tabular-nums shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200 ml-auto block"
+      value={str}
+      onChange={(e) => setStr(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+        if (e.key === "Escape") {
+          setStr(String(product.stock));
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
+  );
+}
+
 export function ProductsPage() {
   const products = useInventoryStore((s) => s.products);
   const categories = useInventoryStore((s) => s.categories);
+  const lastFeedback = useInventoryStore((s) => s.lastFeedback);
   const addProduct = useInventoryStore((s) => s.addProduct);
   const updateProduct = useInventoryStore((s) => s.updateProduct);
   const deleteProduct = useInventoryStore((s) => s.deleteProduct);
   const importProducts = useInventoryStore((s) => s.importProducts);
+  const clearFeedback = useInventoryStore((s) => s.clearFeedback);
 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("");
@@ -35,6 +150,12 @@ export function ProductsPage() {
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
   const [importSummary, setImportSummary] = useState<ImportSummary>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!lastFeedback) return;
+    const t = setTimeout(() => clearFeedback(), 4000);
+    return () => clearTimeout(t);
+  }, [lastFeedback, clearFeedback]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -97,7 +218,10 @@ export function ProductsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Productos</h1>
           <p className="text-sm text-slate-500">
-            Gestioná el catálogo: alta, edición, importación y exportación.
+            Gestioná el catálogo: alta, edición, importación y exportación. Podés
+            cambiar <strong className="font-medium text-slate-700">precio</strong>{" "}
+            y <strong className="font-medium text-slate-700">stock</strong>{" "}
+            directo en la tabla (Enter o clic afuera para guardar).
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -141,6 +265,30 @@ export function ProductsPage() {
           </button>
         </div>
       </div>
+
+      {lastFeedback && (
+        <div
+          className={`rounded-lg border px-3 py-2 text-sm ${
+            lastFeedback.kind === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : lastFeedback.kind === "warning"
+                ? "border-amber-200 bg-amber-50 text-amber-800"
+                : "border-rose-200 bg-rose-50 text-rose-800"
+          }`}
+          role="status"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <span>{lastFeedback.message}</span>
+            <button
+              type="button"
+              className="shrink-0 text-xs underline opacity-70 hover:opacity-100"
+              onClick={() => clearFeedback()}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
 
       {importSummary && (
         <div className="card border-l-4 border-brand-500 p-4">
@@ -226,8 +374,18 @@ export function ProductsPage() {
               <th className="px-4 py-3 text-left font-medium">Producto</th>
               <th className="px-4 py-3 text-left font-medium">Categoría</th>
               <th className="px-4 py-3 text-right font-medium">Costo</th>
-              <th className="px-4 py-3 text-right font-medium">Precio</th>
-              <th className="px-4 py-3 text-right font-medium">Stock</th>
+              <th className="px-4 py-3 text-right font-medium">
+                Precio{" "}
+                <span className="block text-[10px] font-normal normal-case text-slate-400">
+                  editable
+                </span>
+              </th>
+              <th className="px-4 py-3 text-right font-medium">
+                Stock{" "}
+                <span className="block text-[10px] font-normal normal-case text-slate-400">
+                  editable
+                </span>
+              </th>
               <th className="px-4 py-3 text-right font-medium">Min</th>
               <th className="px-4 py-3 text-right font-medium">Acciones</th>
             </tr>
@@ -244,18 +402,6 @@ export function ProductsPage() {
               </tr>
             )}
             {filtered.map((p) => {
-              const status =
-                p.stock === 0
-                  ? "out"
-                  : p.stock <= p.minStock
-                    ? "low"
-                    : "ok";
-              const stockClass =
-                status === "ok"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : status === "low"
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-rose-100 text-rose-700";
               return (
                 <tr key={p.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
@@ -277,11 +423,11 @@ export function ProductsPage() {
                   <td className="px-4 py-3 text-right text-slate-600">
                     {formatCurrency(p.cost)}
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold text-slate-800">
-                    {formatCurrency(p.price)}
+                  <td className="px-4 py-3 text-right align-middle">
+                    <InlinePriceField key={`pf-${p.id}-${p.price}`} product={p} />
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={`badge ${stockClass}`}>{p.stock}</span>
+                  <td className="px-4 py-3 text-right align-middle">
+                    <InlineStockField key={`sf-${p.id}-${p.stock}`} product={p} />
                   </td>
                   <td className="px-4 py-3 text-right text-slate-500">
                     {p.minStock}
