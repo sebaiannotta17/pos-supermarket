@@ -1,46 +1,39 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useInventoryStore } from "../store/useInventoryStore";
 import type { Product, ProductInput } from "../types";
-import { CATEGORIES } from "../data/mockProducts";
 
 type Props = {
-  open: boolean;
   initial?: Product | null;
   onClose: () => void;
   onSubmit: (input: ProductInput) => string | null;
 };
 
-const empty: ProductInput = {
-  barcode: "",
-  name: "",
-  price: 0,
-  category: CATEGORIES[0],
-  stock: 0,
-  image: "",
-};
-
-export function ProductFormModal({ open, initial, onClose, onSubmit }: Props) {
-  const [form, setForm] = useState<ProductInput>(empty);
+export function ProductFormModal({ initial, onClose, onSubmit }: Props) {
+  const categories = useInventoryStore((s) => s.categories);
+  const [form, setForm] = useState<ProductInput>(() =>
+    initial
+      ? {
+          barcode: initial.barcode,
+          name: initial.name,
+          price: initial.price,
+          cost: initial.cost,
+          category: initial.category,
+          stock: initial.stock,
+          minStock: initial.minStock,
+          image: initial.image ?? "",
+        }
+      : {
+          barcode: "",
+          name: "",
+          price: 0,
+          cost: 0,
+          category: categories[0]?.name ?? "",
+          stock: 0,
+          minStock: 0,
+          image: "",
+        }
+  );
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setForm(
-        initial
-          ? {
-              barcode: initial.barcode,
-              name: initial.name,
-              price: initial.price,
-              category: initial.category,
-              stock: initial.stock,
-              image: initial.image ?? "",
-            }
-          : empty
-      );
-      setError(null);
-    }
-  }, [open, initial]);
-
-  if (!open) return null;
 
   const handleChange = <K extends keyof ProductInput>(
     key: K,
@@ -57,10 +50,13 @@ export function ProductFormModal({ open, initial, onClose, onSubmit }: Props) {
     onClose();
   };
 
+  const margin = form.price - form.cost;
+  const marginPct = form.price > 0 ? (margin / form.price) * 100 : 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-xl">
+      <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <h2 className="text-lg font-semibold">
             {initial ? "Editar producto" : "Nuevo producto"}
@@ -86,7 +82,10 @@ export function ProductFormModal({ open, initial, onClose, onSubmit }: Props) {
             </svg>
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
+        <form
+          onSubmit={handleSubmit}
+          className="max-h-[80vh] space-y-4 overflow-y-auto px-6 py-5"
+        >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className="label" htmlFor="name">
@@ -100,18 +99,20 @@ export function ProductFormModal({ open, initial, onClose, onSubmit }: Props) {
                 required
               />
             </div>
+
             <div>
               <label className="label" htmlFor="barcode">
                 Código de barras
               </label>
               <input
                 id="barcode"
-                className="input"
+                className="input font-mono"
                 value={form.barcode}
                 onChange={(e) => handleChange("barcode", e.target.value)}
                 required
               />
             </div>
+
             <div>
               <label className="label" htmlFor="category">
                 Categoría
@@ -124,14 +125,30 @@ export function ProductFormModal({ open, initial, onClose, onSubmit }: Props) {
                 onChange={(e) => handleChange("category", e.target.value)}
               />
               <datalist id="category-options">
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c} />
+                {categories.map((c) => (
+                  <option key={c.id} value={c.name} />
                 ))}
               </datalist>
             </div>
+
+            <div>
+              <label className="label" htmlFor="cost">
+                Costo
+              </label>
+              <input
+                id="cost"
+                type="number"
+                min={0}
+                step="0.01"
+                className="input"
+                value={form.cost}
+                onChange={(e) => handleChange("cost", Number(e.target.value) || 0)}
+              />
+            </div>
+
             <div>
               <label className="label" htmlFor="price">
-                Precio
+                Precio de venta
               </label>
               <input
                 id="price"
@@ -140,15 +157,14 @@ export function ProductFormModal({ open, initial, onClose, onSubmit }: Props) {
                 step="0.01"
                 className="input"
                 value={form.price}
-                onChange={(e) =>
-                  handleChange("price", Number(e.target.value) || 0)
-                }
+                onChange={(e) => handleChange("price", Number(e.target.value) || 0)}
                 required
               />
             </div>
+
             <div>
               <label className="label" htmlFor="stock">
-                Stock
+                Stock actual
               </label>
               <input
                 id="stock"
@@ -157,12 +173,29 @@ export function ProductFormModal({ open, initial, onClose, onSubmit }: Props) {
                 step="1"
                 className="input"
                 value={form.stock}
+                onChange={(e) => handleChange("stock", Number(e.target.value) || 0)}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="label" htmlFor="minStock">
+                Stock mínimo (alerta)
+              </label>
+              <input
+                id="minStock"
+                type="number"
+                min={0}
+                step="1"
+                className="input"
+                value={form.minStock}
                 onChange={(e) =>
-                  handleChange("stock", Number(e.target.value) || 0)
+                  handleChange("minStock", Number(e.target.value) || 0)
                 }
                 required
               />
             </div>
+
             <div className="md:col-span-2">
               <label className="label" htmlFor="image">
                 URL de imagen (opcional)
@@ -177,6 +210,23 @@ export function ProductFormModal({ open, initial, onClose, onSubmit }: Props) {
             </div>
           </div>
 
+          {form.price > 0 && form.cost > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              Margen estimado:{" "}
+              <span
+                className={
+                  margin >= 0 ? "font-semibold text-emerald-700" : "font-semibold text-rose-700"
+                }
+              >
+                {margin.toLocaleString("es-AR", {
+                  style: "currency",
+                  currency: "ARS",
+                })}{" "}
+                ({marginPct.toFixed(1)}%)
+              </span>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {error}
@@ -184,11 +234,7 @@ export function ProductFormModal({ open, initial, onClose, onSubmit }: Props) {
           )}
 
           <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={onClose}
-            >
+            <button type="button" className="btn-secondary" onClick={onClose}>
               Cancelar
             </button>
             <button type="submit" className="btn-primary">
