@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ProductImage } from "../components/ProductImage";
 import { formatCurrency } from "../lib/format";
@@ -6,7 +7,8 @@ import { useInventoryStore } from "../store/useInventoryStore";
 
 export function DashboardPage() {
   const stats = useCatalogStats();
-  const recentProducts = useInventoryStore((s) => s.products.slice(0, 6));
+  const products = useInventoryStore((s) => s.products);
+  const recentProducts = useMemo(() => products.slice(0, 6), [products]);
 
   return (
     <div className="space-y-6 p-4 lg:p-6">
