@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { DEFAULT_CATEGORIES, MOCK_PRODUCTS } from "../data/mockProducts";
@@ -326,9 +327,15 @@ function validateProduct(input: ProductInput): string | null {
   return null;
 }
 
+/**
+ * Derivamos KPIs con useMemo desde `products` (referencia estable en el store).
+ * No usar un único selector que devuelva un objeto nuevo cada vez: React 19 +
+ * useSyncExternalStore tratá eso como snapshot distinto siempre (#185 máxima profundidad).
+ */
 export function useInventoryKpis() {
-  return useInventoryStore((state) => {
-    const products = state.products;
+  const products = useInventoryStore((s) => s.products);
+
+  return useMemo(() => {
     const totalUnits = products.reduce((acc, p) => acc + p.stock, 0);
     const inventoryValueByCost = products.reduce(
       (acc, p) => acc + p.stock * p.cost,
@@ -352,5 +359,5 @@ export function useInventoryKpis() {
       lowStock,
       outOfStock,
     };
-  });
+  }, [products]);
 }
