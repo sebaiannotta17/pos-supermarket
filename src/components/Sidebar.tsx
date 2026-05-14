@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { ProfileSwitcher } from "./ProfileSwitcher";
 
 const links = [
   { to: "/", label: "Dashboard", icon: "DashIcon" },
@@ -96,9 +97,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </NavLink>
         ))}
       </nav>
-      <div className="px-6 py-4 border-t border-slate-800 text-xs text-slate-400">
-        <p>Catálogo v3</p>
-        <p className="mt-1">Datos guardados en este navegador.</p>
+      <ProfileSwitcher />
+      <div className="px-6 pb-3 text-[10px] text-slate-500">
+        Catálogo con perfiles locales
       </div>
     </aside>
   );

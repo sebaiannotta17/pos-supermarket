@@ -46,7 +46,7 @@ export function Layout() {
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
-          <span className="font-semibold text-slate-800">POS Supermercado</span>
+          <span className="font-semibold text-slate-800">Catálogo</span>
           <span className="w-9" />
         </header>
         <main className="flex-1 overflow-y-auto">

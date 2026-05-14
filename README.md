@@ -10,7 +10,11 @@ Stack: **React 19**, **TypeScript**, **Vite**, **Tailwind CSS v4**, **Zustand**.
 - **Productos** (CRUD): nombre, código de barras, categoría, costo, precio de venta, imagen (URL). Tabla sólo lectura; los cambios se hacen con **Editar** o **Nuevo producto**.
 - **Categorías** (ABM): alta, edición con color y baja si no tiene productos.
 - **CSV**: plantilla descargable, importación (upsert por código de barras) y exportación.
-- Persistencia en el navegador (`localStorage`, clave `inventory-catalog-v1`).
+- Persistencia en el navegador: catálogo por perfil (`inventory-catalog-*`) + preferencias (`catalog-profiles-v1`).
+
+## Perfiles Mamá / Papá
+
+Selector al pie del menú: cada persona tiene **su propio catálogo** guardado aparte en el mismo navegador. Podés cambiar cómo aparece cada nombre (“Cambiar nombres mostrados”). **No lleva contraseña** — es para uso familiar en casa.
 
 ## Scripts
 
@@ -30,7 +34,7 @@ src/
 ├── data/         mockProducts.ts · categorías por defecto
 ├── lib/          format.ts · csv.ts
 ├── pages/        DashboardPage, ProductsPage, CategoriesPage
-├── store/        useInventoryStore.ts · useCatalogStats()
+├── store/        useInventoryStore.ts · catalogStorage.ts · useProfileStore.ts
 └── types/        Product, Category, ...
 ```
 
@@ -54,4 +58,4 @@ Para volver al catálogo mock desde la consola del navegador:
 useInventoryStore.getState().resetAll()
 ```
 
-Si ves datos viejos con otra forma, borrá en DevTools → Application → Local Storage la entrada `inventory-catalog-v1` (antes `inventory-store-v2`, etc.).
+Si ves datos viejos, en DevTools → Application → borrá las claves `inventory-catalog-*` y `catalog-profiles-v1` (y la legada `inventory-catalog-v1` si sigue apareciendo).
