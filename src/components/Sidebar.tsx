@@ -5,6 +5,7 @@ const links = [
   { to: "/", label: "Dashboard", icon: "DashIcon" },
   { to: "/productos", label: "Productos", icon: "BoxIcon" },
   { to: "/categorias", label: "Categorías", icon: "TagIcon" },
+  { to: "/importar", label: "Importar Excel", icon: "UploadIcon" },
 ] as const;
 
 type IconName = (typeof links)[number]["icon"];
@@ -43,6 +44,14 @@ function Icon({ name }: { name: IconName }) {
         <svg {...common}>
           <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
           <line x1="7" y1="7" x2="7.01" y2="7" />
+        </svg>
+      );
+    case "UploadIcon":
+      return (
+        <svg {...common}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
       );
     default:

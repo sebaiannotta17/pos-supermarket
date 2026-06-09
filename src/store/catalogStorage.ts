@@ -4,9 +4,27 @@ import { useInventoryStore } from "./useInventoryStore";
 import { useProfileStore } from "./useProfileStore";
 
 const LEGACY_KEY = "inventory-catalog-v1";
+const SCHEMA_VERSION_KEY = "catalog-schema-version";
+/** Bump cuando hay que vaciar datos viejos / migrar estructura. */
+const CURRENT_SCHEMA_VERSION = "2";
 
 function storageKey(profileId: string): string {
   return `inventory-catalog-${profileId}`;
+}
+
+/** Vacía datos de prueba y deja solo categorías del Excel (v2). */
+function applySchemaMigrations(): void {
+  if (typeof localStorage === "undefined") return;
+  if (localStorage.getItem(SCHEMA_VERSION_KEY) === CURRENT_SCHEMA_VERSION) return;
+
+  const emptyCatalog = JSON.stringify({
+    products: [],
+    categories: DEFAULT_CATEGORIES,
+  });
+  localStorage.setItem(storageKey("mama"), emptyCatalog);
+  localStorage.setItem(storageKey("papa"), emptyCatalog);
+  localStorage.removeItem(LEGACY_KEY);
+  localStorage.setItem(SCHEMA_VERSION_KEY, CURRENT_SCHEMA_VERSION);
 }
 
 let legacyMigrated = false;
@@ -80,7 +98,8 @@ export function scheduleCatalogSave(): void {
 }
 
 function normalizeProducts(raw: unknown): Product[] {
-  if (!Array.isArray(raw) || raw.length === 0) return MOCK_PRODUCTS;
+  if (!Array.isArray(raw)) return MOCK_PRODUCTS;
+  if (raw.length === 0) return [];
   const mapped: Product[] = [];
   for (const row of raw) {
     if (!row || typeof row !== "object") continue;
@@ -98,7 +117,7 @@ function normalizeProducts(raw: unknown): Product[] {
           : undefined,
     });
   }
-  return mapped.length > 0 ? mapped : MOCK_PRODUCTS;
+  return mapped;
 }
 
 function normalizeCategories(raw: unknown): Category[] {
@@ -143,6 +162,7 @@ export function loadCatalogForActiveProfile(): void {
 }
 
 export function initCatalogAfterProfilesHydrated(): void {
+  applySchemaMigrations();
   migrateLegacyCatalogOnce();
   loadCatalogForActiveProfile();
   enableCatalogSaves();

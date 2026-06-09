@@ -15,6 +15,7 @@ type ImportSummary = {
   inserted: number;
   updated: number;
   errors: string[];
+  excel?: boolean;
 } | null;
 
 export function ProductsPage() {
@@ -24,6 +25,8 @@ export function ProductsPage() {
   const updateProduct = useInventoryStore((s) => s.updateProduct);
   const deleteProduct = useInventoryStore((s) => s.deleteProduct);
   const importProducts = useInventoryStore((s) => s.importProducts);
+  const importExcelCatalog = useInventoryStore((s) => s.importExcelCatalog);
+  const clearCatalog = useInventoryStore((s) => s.clearCatalog);
 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("");
@@ -31,6 +34,7 @@ export function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
   const [importSummary, setImportSummary] = useState<ImportSummary>(null);
+  const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -62,22 +66,45 @@ export function ProductsPage() {
     downloadFile("plantilla-productos.csv", PRODUCT_CSV_TEMPLATE);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = String(ev.target?.result ?? "");
-      const { rows, errors } = parseProductsCsv(text);
-      const result = importProducts(rows);
-      setImportSummary({
-        inserted: result.inserted,
-        updated: result.updated,
-        errors: [...errors, ...result.errors],
-      });
-    };
-    reader.readAsText(file);
-    e.target.value = "";
+    setImporting(true);
+    setImportSummary(null);
+
+    try {
+      if (/\.xlsx?$/i.test(file.name)) {
+        const result = await importExcelCatalog(file, { replace: true });
+        setImportSummary({
+          inserted: result.inserted,
+          updated: 0,
+          excel: true,
+          errors: [...result.errors, ...result.warnings],
+        });
+      } else {
+        const text = await file.text();
+        const { rows, errors } = parseProductsCsv(text);
+        if (rows.length === 0 && errors.length === 0) {
+          setImportSummary({
+            inserted: 0,
+            updated: 0,
+            errors: [
+              "No se encontraron filas válidas. Para el Excel de la tienda usá un archivo .xlsx (no CSV).",
+            ],
+          });
+        } else {
+          const result = importProducts(rows);
+          setImportSummary({
+            inserted: result.inserted,
+            updated: result.updated,
+            errors: [...errors, ...result.errors],
+          });
+        }
+      }
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
   };
 
   return (
@@ -100,14 +127,15 @@ export function ProductsPage() {
           <button
             type="button"
             className="btn-secondary"
+            disabled={importing}
             onClick={() => fileInputRef.current?.click()}
           >
-            Importar CSV
+            {importing ? "Importando…" : "Importar Excel"}
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".xlsx,.xls,.csv,text/csv"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -139,10 +167,11 @@ export function ProductsPage() {
                 Importación finalizada
               </p>
               <p className="text-sm text-slate-600">
-                {importSummary.inserted} agregados ·{" "}
-                {importSummary.updated} actualizados
+                {importSummary.excel
+                  ? `${importSummary.inserted} productos importados desde Excel`
+                  : `${importSummary.inserted} agregados · ${importSummary.updated} actualizados`}
                 {importSummary.errors.length > 0
-                  ? ` · ${importSummary.errors.length} errores`
+                  ? ` · ${importSummary.errors.length} avisos`
                   : ""}
               </p>
               {importSummary.errors.length > 0 && (
@@ -214,7 +243,29 @@ export function ProductsPage() {
                   colSpan={5}
                   className="px-4 py-8 text-center text-sm text-slate-400"
                 >
-                  No se encontraron productos.
+                  {products.length === 0 ? (
+                    <span>
+                      No hay productos.{" "}
+                      <button
+                        type="button"
+                        className="text-brand-600 underline"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Importar Excel
+                      </button>
+                      {" o "}
+                      <button
+                        type="button"
+                        className="text-brand-600 underline"
+                        onClick={() => clearCatalog()}
+                      >
+                        vaciar datos viejos
+                      </button>
+                      .
+                    </span>
+                  ) : (
+                    "No se encontraron productos."
+                  )}
                 </td>
               </tr>
             )}
