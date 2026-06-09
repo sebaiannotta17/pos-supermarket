@@ -1,44 +1,83 @@
 import { useState } from "react";
 import { useInventoryStore } from "../store/useInventoryStore";
-import type { Product, ProductInput } from "../types";
+import {
+  emptyValuesForColumns,
+  findCategoryByName,
+  primaryCost,
+  primarySalePrice,
+} from "../lib/productValues";
+import type { Category, CategoryColumn, Product, ProductInput } from "../types";
 
 type Props = {
   initial?: Product | null;
+  fixedCategory?: Category;
   onClose: () => void;
   onSubmit: (input: ProductInput) => string | null;
 };
 
-export function ProductFormModal({ initial, onClose, onSubmit }: Props) {
+export function ProductFormModal({
+  initial,
+  fixedCategory,
+  onClose,
+  onSubmit,
+}: Props) {
   const categories = useInventoryStore((s) => s.categories);
-  const [form, setForm] = useState<ProductInput>(() =>
-    initial
-      ? {
-          barcode: initial.barcode,
-          name: initial.name,
-          price: initial.price,
-          cost: initial.cost,
-          category: initial.category,
-          image: initial.image ?? "",
-        }
-      : {
-          barcode: "",
-          name: "",
-          price: 0,
-          cost: 0,
-          category: categories[0]?.name ?? "",
-          image: "",
-        }
+
+  const [categoryName, setCategoryName] = useState(
+    fixedCategory?.name ?? initial?.category ?? categories[0]?.name ?? ""
   );
+  const activeCategory =
+    fixedCategory ??
+    findCategoryByName(categories, categoryName) ??
+    categories[0];
+
+  const [form, setForm] = useState<ProductInput>(() => {
+    if (initial) {
+      return {
+        barcode: initial.barcode,
+        name: initial.name,
+        category: initial.category,
+        image: initial.image ?? "",
+        values: { ...initial.values },
+      };
+    }
+    const cat = fixedCategory ?? categories[0];
+    return {
+      barcode: "",
+      name: "",
+      category: cat?.name ?? "",
+      image: "",
+      values: cat ? emptyValuesForColumns(cat.columns) : {},
+    };
+  });
   const [error, setError] = useState<string | null>(null);
 
-  const handleChange = <K extends keyof ProductInput>(
-    key: K,
-    value: ProductInput[K]
-  ) => setForm((prev) => ({ ...prev, [key]: value }));
+  const columns = activeCategory?.columns ?? [];
+
+  const setValue = (columnId: string, value: number) => {
+    setForm((prev) => ({
+      ...prev,
+      values: { ...prev.values, [columnId]: value },
+    }));
+  };
+
+  const handleCategoryChange = (name: string) => {
+    setCategoryName(name);
+    const cat = findCategoryByName(categories, name);
+    if (!cat) return;
+    setForm((prev) => ({
+      ...prev,
+      category: name,
+      values: emptyValuesForColumns(cat.columns),
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const result = onSubmit(form);
+    const result = onSubmit({
+      ...form,
+      category: fixedCategory?.name ?? categoryName,
+    });
     if (result) {
       setError(result);
       return;
@@ -46,8 +85,14 @@ export function ProductFormModal({ initial, onClose, onSubmit }: Props) {
     onClose();
   };
 
-  const margin = form.price - form.cost;
-  const marginPct = form.price > 0 ? (margin / form.price) * 100 : 0;
+  const previewProduct: Product = {
+    id: "preview",
+    ...form,
+    category: fixedCategory?.name ?? categoryName,
+  };
+  const sale = primarySalePrice(previewProduct, activeCategory);
+  const cost = primaryCost(previewProduct, activeCategory);
+  const margin = sale - cost;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -55,27 +100,16 @@ export function ProductFormModal({ initial, onClose, onSubmit }: Props) {
       <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <h2 className="text-lg font-semibold">
-            {initial ? "Editar producto" : "Nuevo producto"}
+            {initial ? "Editar artículo" : "Nuevo artículo"}
+            {activeCategory ? ` — ${activeCategory.name}` : ""}
           </h2>
           <button
             type="button"
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded p-1 text-slate-400 hover:bg-slate-100"
             onClick={onClose}
             aria-label="Cerrar"
           >
-            <svg
-              viewBox="0 0 24 24"
-              width="20"
-              height="20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            ×
           </button>
         </div>
         <form
@@ -84,107 +118,65 @@ export function ProductFormModal({ initial, onClose, onSubmit }: Props) {
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
-              <label className="label" htmlFor="name">
-                Nombre
-              </label>
+              <label className="label">Artículo</label>
               <input
-                id="name"
                 className="input"
                 value={form.name}
-                onChange={(e) => handleChange("name", e.target.value)}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, name: e.target.value }))
+                }
                 required
+                placeholder="Nombre y peso / marca"
               />
             </div>
 
             <div>
-              <label className="label" htmlFor="barcode">
-                Código de barras
-              </label>
+              <label className="label">Código</label>
               <input
-                id="barcode"
                 className="input font-mono"
                 value={form.barcode}
-                onChange={(e) => handleChange("barcode", e.target.value)}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, barcode: e.target.value }))
+                }
                 required
               />
             </div>
 
-            <div>
-              <label className="label" htmlFor="category">
-                Categoría
-              </label>
-              <input
-                id="category"
-                list="category-options"
-                className="input"
-                value={form.category}
-                onChange={(e) => handleChange("category", e.target.value)}
-              />
-              <datalist id="category-options">
-                {categories.map((c) => (
-                  <option key={c.id} value={c.name} />
-                ))}
-              </datalist>
-            </div>
+            {!fixedCategory && (
+              <div>
+                <label className="label">Categoría</label>
+                <select
+                  className="input"
+                  value={categoryName}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
+                >
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-            <div>
-              <label className="label" htmlFor="cost">
-                Costo
-              </label>
-              <input
-                id="cost"
-                type="number"
-                min={0}
-                step="0.01"
-                className="input"
-                value={form.cost}
-                onChange={(e) => handleChange("cost", Number(e.target.value) || 0)}
+            {columns.map((col) => (
+              <ColumnField
+                key={col.id}
+                column={col}
+                value={form.values[col.id] ?? 0}
+                onChange={(v) => setValue(col.id, v)}
               />
-            </div>
-
-            <div>
-              <label className="label" htmlFor="price">
-                Precio de venta
-              </label>
-              <input
-                id="price"
-                type="number"
-                min={0}
-                step="0.01"
-                className="input"
-                value={form.price}
-                onChange={(e) => handleChange("price", Number(e.target.value) || 0)}
-                required
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="label" htmlFor="image">
-                URL de imagen (opcional)
-              </label>
-              <input
-                id="image"
-                className="input"
-                value={form.image ?? ""}
-                onChange={(e) => handleChange("image", e.target.value)}
-                placeholder="https://..."
-              />
-            </div>
+            ))}
           </div>
 
-          {form.price > 0 && form.cost > 0 && (
+          {sale > 0 && cost > 0 && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               Margen estimado:{" "}
-              <span
-                className={
-                  margin >= 0 ? "font-semibold text-emerald-700" : "font-semibold text-rose-700"
-                }
-              >
+              <span className="font-semibold text-emerald-700">
                 {margin.toLocaleString("es-AR", {
                   style: "currency",
                   currency: "ARS",
-                })}{" "}
-                ({marginPct.toFixed(1)}%)
+                })}
               </span>
             </div>
           )}
@@ -195,16 +187,40 @@ export function ProductFormModal({ initial, onClose, onSubmit }: Props) {
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancelar
             </button>
             <button type="submit" className="btn-primary">
-              {initial ? "Guardar cambios" : "Crear producto"}
+              {initial ? "Guardar" : "Crear"}
             </button>
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function ColumnField({
+  column,
+  value,
+  onChange,
+}: {
+  column: CategoryColumn;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div>
+      <label className="label">{column.label}</label>
+      <input
+        type="number"
+        min={0}
+        step="1"
+        className="input"
+        value={value || ""}
+        onChange={(e) => onChange(Number(e.target.value) || 0)}
+      />
     </div>
   );
 }

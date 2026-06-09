@@ -2,8 +2,14 @@ import { useMemo } from "react";
 import { create } from "zustand";
 
 import { DEFAULT_CATEGORIES, MOCK_PRODUCTS } from "../data/mockProducts";
+import { defaultColumnsForCategory } from "../data/categoryColumns";
 import { parseExcelCatalog } from "../lib/excelImport";
 import { generateId } from "../lib/format";
+import {
+  findCategoryByName,
+  primaryCost,
+  primarySalePrice,
+} from "../lib/productValues";
 import type {
   Category,
   CategoryInput,
@@ -35,6 +41,7 @@ type InventoryState = {
 
   findByBarcode: (barcode: string) => Product | undefined;
   findById: (id: string) => Product | undefined;
+  getCategoryById: (id: string) => Category | undefined;
 
   addProduct: (input: ProductInput) => Product | { error: string };
   updateProduct: (
@@ -87,7 +94,11 @@ function ensureCategories(names: string[]): void {
   const existing = new Set(state.categories.map((c) => c.name.toLowerCase()));
   for (const name of names) {
     if (existing.has(name.toLowerCase())) continue;
-    state.addCategory({ name, color: colorForCategory(name) });
+    state.addCategory({
+      name,
+      color: colorForCategory(name),
+      columns: defaultColumnsForCategory(name),
+    });
     existing.add(name.toLowerCase());
   }
 }
@@ -108,8 +119,10 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
 
   findById: (id) => get().products.find((p) => p.id === id),
 
+  getCategoryById: (id) => get().categories.find((c) => c.id === id),
+
   addProduct: (input) => {
-    const validation = validateProduct(input);
+    const validation = validateProduct(input, get().categories);
     if (validation) return { error: validation };
     const barcode = input.barcode.trim();
     const duplicate = get().products.find((p) => p.barcode === barcode);
@@ -119,17 +132,16 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
       id: generateId("p"),
       barcode,
       name: input.name.trim(),
-      price: Number(input.price) || 0,
-      cost: Number(input.cost) || 0,
       category: input.category.trim() || "Sin categoría",
       image: input.image?.trim() || undefined,
+      values: sanitizeValues(input.values),
     };
     set({ products: [product, ...get().products] });
     return product;
   },
 
   updateProduct: (id, input) => {
-    const validation = validateProduct(input);
+    const validation = validateProduct(input, get().categories);
     if (validation) return { error: validation };
     const barcode = input.barcode.trim();
     const duplicate = get().products.find(
@@ -147,10 +159,9 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
           ...p,
           barcode,
           name: input.name.trim(),
-          price: Number(input.price) || 0,
-          cost: Number(input.cost) || 0,
           category: input.category.trim() || "Sin categoría",
           image: input.image?.trim() || undefined,
+          values: sanitizeValues(input.values),
         };
         return updated;
       }),
@@ -166,6 +177,8 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
   addCategory: (input) => {
     const name = input.name.trim();
     if (!name) return { error: "El nombre es obligatorio." };
+    if (!input.columns?.length)
+      return { error: "Elegí al menos una columna para la categoría." };
     const exists = get().categories.find(
       (c) => c.name.toLowerCase() === name.toLowerCase()
     );
@@ -174,6 +187,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
       id: generateId("cat"),
       name,
       color: input.color || "#64748b",
+      columns: input.columns,
     };
     set({ categories: [...get().categories, cat] });
     return cat;
@@ -182,6 +196,8 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
   updateCategory: (id, input) => {
     const name = input.name.trim();
     if (!name) return { error: "El nombre es obligatorio." };
+    if (!input.columns?.length)
+      return { error: "Elegí al menos una columna para la categoría." };
     const exists = get().categories.find(
       (c) => c.name.toLowerCase() === name.toLowerCase() && c.id !== id
     );
@@ -192,6 +208,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
       ...previous,
       name,
       color: input.color || previous.color,
+      columns: input.columns,
     };
     set({
       categories: get().categories.map((c) => (c.id === id ? updated : c)),
@@ -224,7 +241,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
     const productsByBarcode = new Map(get().products.map((p) => [p.barcode, p]));
 
     rows.forEach((raw, idx) => {
-      const validation = validateProduct(raw);
+      const validation = validateProduct(raw, get().categories);
       if (validation) {
         errors.push(`Fila ${idx + 1}: ${validation}`);
         return;
@@ -275,6 +292,7 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
         const products: Product[] = parsed.products.map((p) => ({
           id: generateId("p"),
           ...p,
+          values: sanitizeValues(p.values),
         }));
         set({
           products,
@@ -334,11 +352,27 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
     }),
 }));
 
-function validateProduct(input: ProductInput): string | null {
+function sanitizeValues(values: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(values)) {
+    out[k] = Number(v) || 0;
+  }
+  return out;
+}
+
+function validateProduct(
+  input: ProductInput,
+  categories: Category[]
+): string | null {
   if (!input.barcode.trim()) return "El código de barras es obligatorio.";
   if (!input.name.trim()) return "El nombre es obligatorio.";
-  if (Number(input.price) < 0) return "El precio no puede ser negativo.";
-  if (Number(input.cost) < 0) return "El costo no puede ser negativo.";
+  const cat = findCategoryByName(categories, input.category);
+  for (const col of cat?.columns ?? []) {
+    const v = input.values[col.id];
+    if (v != null && v < 0) return `${col.label} no puede ser negativo.`;
+  }
+  const hasValue = Object.values(input.values ?? {}).some((v) => v > 0);
+  if (!hasValue) return "Completá al menos un precio.";
   return null;
 }
 
@@ -349,13 +383,22 @@ export function useCatalogStats() {
   return useMemo(() => {
     const avgPrice =
       products.length > 0
-        ? products.reduce((a, p) => a + p.price, 0) / products.length
+        ? products.reduce((a, p) => {
+            const cat = findCategoryByName(categories, p.category);
+            return a + primarySalePrice(p, cat);
+          }, 0) / products.length
         : 0;
     const avgMargin =
       products.length > 0
-        ? products.reduce((a, p) => a + (p.price - p.cost), 0) / products.length
+        ? products.reduce((a, p) => {
+            const cat = findCategoryByName(categories, p.category);
+            return (
+              a + (primarySalePrice(p, cat) - primaryCost(p, cat))
+            );
+          }, 0) / products.length
         : 0;
     const byCategory = [...categories].map((c) => ({
+      id: c.id,
       name: c.name,
       count: products.filter((p) => p.category === c.name).length,
     }));

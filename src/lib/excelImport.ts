@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { defaultColumnsForCategory } from "../data/categoryColumns";
 import { SHEET_TO_CATEGORY } from "../data/storeCategories";
 import type { ProductInput } from "../types";
 
@@ -49,7 +50,7 @@ function normalizeSectionTitle(raw: string): string {
   if (/^MACETAS/i.test(t)) return "Macetas";
   if (/^CARBONES/i.test(t)) return "Carbones";
   if (/^GARRAFAS/i.test(t)) return "Garrafas";
-  if (/^ROLLOS DE COCINA/i.test(t)) return "Rollos de cocina";
+  if (/^ROLLOS DE COCINA/i.test(t)) return "Papeles";
   if (/^TODO SUELTO/i.test(t)) return "Todo Suelto";
   if (/^CONDIMENTOS/i.test(t)) return "Condimentos";
   if (/^BEBIDAS/i.test(t)) return "Bebidas";
@@ -93,45 +94,82 @@ function isSectionTitleRow(cells: RowCells): boolean {
   return false;
 }
 
-function extractPrices(cells: RowCells): { cost: number; price: number } | null {
+function extractValues(
+  categoryName: string,
+  cells: RowCells
+): Record<string, number> | null {
   const b = parseNum(cells[1]);
   const c = parseNum(cells[2]);
   const d = parseNum(cells[3]);
   const e = parseNum(cells[4]);
+  const n = categoryName.toLowerCase();
+  const values: Record<string, number> = {};
 
-  // Perros/gatos: kg (B,C) y bolsa (D,E) — usar precio de bolsa si existe
-  if (e != null && e > 0) {
-    return { cost: d ?? b ?? 0, price: e };
+  if (n === "perros" || n === "gatos") {
+    if (b != null) values.costo_kg = b;
+    if (c != null) values.negocio_kg = c;
+    if (d != null) values.costo_bolsa = d;
+    if (e != null) values.negocio_bolsa = e;
+    // Sanitarios u otros con solo B y E
+    if (e != null && c == null && d == null && b != null) {
+      values.negocio_bolsa = e;
+    }
+    return Object.keys(values).length > 0 ? values : null;
   }
 
-  // Estándar: COSTO | NEGOCIO
-  if (b != null && c != null && c > 0) {
-    return { cost: b, price: c };
+  if (n === "verduras") {
+    if (b != null && b > 0) {
+      values.negocio_kg = b;
+      return values;
+    }
+    return null;
   }
 
-  // Macetas: columna B vacía, costo en C y precio en D
+  if (n === "todo suelto") {
+    if (b != null) values.costo = b;
+    if (c != null) values.negocio_liquido = c;
+    if (d != null) values.negocio_bidon = d;
+    return Object.keys(values).length > 0 ? values : null;
+  }
+
+  // Macetas: B vacío, C costo, D negocio
   if (c != null && d != null && d > 0 && (b == null || b === 0)) {
-    return { cost: c, price: d };
+    values.costo = c;
+    values.negocio = d;
+    return values;
   }
 
-  // Agroquímicos: COSTO en B, NEGOCIO en D (C vacía)
+  // Agroquímicos: B costo, D negocio (C vacía)
   if (b != null && d != null && d > 0 && (c == null || c === 0)) {
-    return { cost: b, price: d };
+    values.costo = b;
+    values.negocio = d;
+    return values;
   }
 
-  // Verduras: solo X KG en B
+  // Estándar B costo, C negocio
+  if (b != null && c != null && c > 0) {
+    values.costo = b;
+    values.negocio = c;
+    return values;
+  }
+
   if (b != null && b > 0) {
-    return { cost: 0, price: b };
+    const cols = defaultColumnsForCategory(categoryName);
+    const id = cols[0]?.id ?? "negocio";
+    values[id] = b;
+    return values;
   }
 
-  // Fallback: dos números en la fila
-  const nums = [b, c, d, e].filter((n): n is number => n != null && n > 0);
+  const nums = [b, c, d, e].filter((x): x is number => x != null && x > 0);
   if (nums.length >= 2) {
     const sorted = [...nums].sort((x, y) => x - y);
-    return { cost: sorted[0], price: sorted[sorted.length - 1] };
+    values.costo = sorted[0];
+    values.negocio = sorted[sorted.length - 1];
+    return values;
   }
   if (nums.length === 1) {
-    return { cost: 0, price: nums[0] };
+    values.negocio = nums[0];
+    return values;
   }
   return null;
 }
@@ -175,8 +213,8 @@ function parseSheet(
     if (!name || name.length < 2) continue;
     if (/^(articulo|costo|negocio)$/i.test(name)) continue;
 
-    const prices = extractPrices(cells);
-    if (!prices) {
+    const values = extractValues(category, cells);
+    if (!values || !Object.values(values).some((v) => v > 0)) {
       warnings.push(`Hoja "${sheetName}" fila ${i + 1}: sin precio — "${name}"`);
       continue;
     }
@@ -189,8 +227,7 @@ function parseSheet(
       barcode: makeBarcode(category, name, dup),
       name,
       category,
-      cost: prices.cost,
-      price: prices.price,
+      values,
     });
   }
 

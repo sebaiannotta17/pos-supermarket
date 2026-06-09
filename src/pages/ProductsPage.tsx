@@ -8,6 +8,10 @@ import {
   parseProductsCsv,
 } from "../lib/csv";
 import { formatCurrency } from "../lib/format";
+import {
+  findCategoryByName,
+  primarySalePrice,
+} from "../lib/productValues";
 import { useInventoryStore } from "../store/useInventoryStore";
 import type { Product, ProductInput } from "../types";
 
@@ -231,8 +235,7 @@ export function ProductsPage() {
             <tr>
               <th className="px-4 py-3 text-left font-medium">Producto</th>
               <th className="px-4 py-3 text-left font-medium">Categoría</th>
-              <th className="px-4 py-3 text-right font-medium">Costo</th>
-              <th className="px-4 py-3 text-right font-medium">Precio</th>
+              <th className="px-4 py-3 text-right font-medium">Precio venta</th>
               <th className="px-4 py-3 text-right font-medium">Acciones</th>
             </tr>
           </thead>
@@ -240,7 +243,7 @@ export function ProductsPage() {
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={4}
                   className="px-4 py-8 text-center text-sm text-slate-400"
                 >
                   {products.length === 0 ? (
@@ -287,11 +290,13 @@ export function ProductsPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-slate-700">{p.category}</td>
-                <td className="px-4 py-3 text-right text-slate-600">
-                  {formatCurrency(p.cost)}
-                </td>
                 <td className="px-4 py-3 text-right font-semibold text-slate-800">
-                  {formatCurrency(p.price)}
+                  {formatCurrency(
+                    primarySalePrice(
+                      p,
+                      findCategoryByName(categories, p.category)
+                    )
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">

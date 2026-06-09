@@ -2,12 +2,17 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ProductImage } from "../components/ProductImage";
 import { formatCurrency } from "../lib/format";
+import {
+  findCategoryByName,
+  primarySalePrice,
+} from "../lib/productValues";
 import { useCatalogStats } from "../store/useInventoryStore";
 import { useInventoryStore } from "../store/useInventoryStore";
 
 export function DashboardPage() {
   const stats = useCatalogStats();
   const products = useInventoryStore((s) => s.products);
+  const categories = useInventoryStore((s) => s.categories);
   const recentProducts = useMemo(() => products.slice(0, 6), [products]);
 
   return (
@@ -63,10 +68,15 @@ export function DashboardPage() {
             ) : (
               stats.byCategory.map((row) => (
                 <li
-                  key={row.name}
+                  key={row.id}
                   className="flex items-center justify-between py-3 text-sm"
                 >
-                  <span className="text-slate-700">{row.name}</span>
+                  <Link
+                    to={`/categorias/${row.id}`}
+                    className="text-slate-700 hover:text-brand-700 hover:underline"
+                  >
+                    {row.name}
+                  </Link>
                   <span className="badge bg-slate-100 text-slate-700">
                     {row.count} productos
                   </span>
@@ -111,7 +121,12 @@ export function DashboardPage() {
                     <p className="text-xs text-slate-500">{p.category}</p>
                   </div>
                   <span className="text-sm font-semibold text-brand-700">
-                    {formatCurrency(p.price)}
+                    {formatCurrency(
+                      primarySalePrice(
+                        p,
+                        findCategoryByName(categories, p.category)
+                      )
+                    )}
                   </span>
                 </li>
               ))

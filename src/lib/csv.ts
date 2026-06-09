@@ -1,24 +1,16 @@
 import Papa from "papaparse";
+import { defaultColumnsForCategory } from "../data/categoryColumns";
 import type { Product, ProductInput } from "../types";
 
-const PRODUCT_HEADERS = [
-  "barcode",
-  "name",
-  "category",
-  "price",
-  "cost",
-  "image",
-] as const;
-
 export function exportProductsCsv(products: Product[]): string {
+  const fields = ["barcode", "name", "category", "values", "image"];
   return Papa.unparse({
-    fields: [...PRODUCT_HEADERS],
+    fields,
     data: products.map((p) => [
       p.barcode,
       p.name,
       p.category,
-      p.price,
-      p.cost,
+      JSON.stringify(p.values),
       p.image ?? "",
     ]),
   });
@@ -54,12 +46,33 @@ export function parseProductsCsv(text: string): ParseProductsResult {
       errors.push(`Línea ${idx + 2}: falta el nombre.`);
       return;
     }
+    const category = (raw.category ?? "Sin categoría").trim() || "Sin categoría";
+    let values: Record<string, number> = {};
+
+    if (raw.values) {
+      try {
+        const parsed = JSON.parse(raw.values) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(parsed)) {
+          values[k] = Number(v) || 0;
+        }
+      } catch {
+        errors.push(`Línea ${idx + 2}: values no es JSON válido.`);
+      }
+    } else if (raw.price != null || raw.cost != null) {
+      const cost = parseNumber(raw.cost);
+      const price = parseNumber(raw.price);
+      const cols = defaultColumnsForCategory(category);
+      if (cols.some((c) => c.id === "costo")) values.costo = cost;
+      if (cols.some((c) => c.id === "negocio")) values.negocio = price;
+      if (cols.some((c) => c.id === "negocio_kg") && !values.negocio)
+        values.negocio_kg = price || cost;
+    }
+
     rows.push({
       barcode,
       name,
-      category: (raw.category ?? "Sin categoría").trim() || "Sin categoría",
-      price: parseNumber(raw.price),
-      cost: parseNumber(raw.cost),
+      category,
+      values,
       image: (raw.image ?? "").trim() || undefined,
     });
   });
@@ -90,4 +103,5 @@ export function downloadFile(
   URL.revokeObjectURL(url);
 }
 
-export const PRODUCT_CSV_TEMPLATE = `${PRODUCT_HEADERS.join(",")}\n7790000000001,Producto Ejemplo,Almacén,1500,1000,\n`;
+export const PRODUCT_CSV_TEMPLATE =
+  'barcode,name,category,values,image\n7790000000001,Producto Ejemplo,Almacén,"{""costo"":1000,""negocio"":1500}",\n';
