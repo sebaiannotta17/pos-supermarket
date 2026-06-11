@@ -301,6 +301,9 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
             message: `Importados ${products.length} productos desde Excel.`,
           },
         });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("catalog-flush-save"));
+        }
         return {
           inserted: products.length,
           replaced: true,
@@ -318,6 +321,9 @@ export const useInventoryStore = create<InventoryState>()((set, get) => ({
           message: `Importados ${result.inserted} nuevos, ${result.updated} actualizados.`,
         },
       });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("catalog-flush-save"));
+      }
       return {
         inserted: result.inserted + result.updated,
         replaced: false,

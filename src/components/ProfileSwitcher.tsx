@@ -1,10 +1,12 @@
-import { switchCatalogProfile } from "../store/catalogStorage";
+import { switchCatalogProfile, getStoredProductCount } from "../store/catalogStorage";
+import { useInventoryStore } from "../store/useInventoryStore";
 import { useProfileStore } from "../store/useProfileStore";
 
 export function ProfileSwitcher() {
   const profiles = useProfileStore((s) => s.profiles);
   const activeProfileId = useProfileStore((s) => s.activeProfileId);
   const renameProfile = useProfileStore((s) => s.renameProfile);
+  const liveCount = useInventoryStore((s) => s.products.length);
 
   return (
     <div className="border-t border-slate-800 px-4 py-4 space-y-3">
@@ -21,11 +23,17 @@ export function ProfileSwitcher() {
           onChange={(e) => switchCatalogProfile(e.target.value)}
           className="w-full cursor-pointer rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-600/40"
         >
-          {profiles.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
+          {profiles.map((p) => {
+            const count =
+              p.id === activeProfileId
+                ? liveCount
+                : getStoredProductCount(p.id);
+            return (
+              <option key={p.id} value={p.id}>
+                {p.name} ({count} productos)
+              </option>
+            );
+          })}
         </select>
       </div>
 
@@ -62,8 +70,8 @@ export function ProfileSwitcher() {
       </details>
 
       <p className="text-[10px] leading-snug text-slate-500">
-        Cada perfil guarda su catálogo por separado en este navegador. No hay
-        contraseña — es para uso familiar.
+        Cada perfil guarda su catálogo por separado en este navegador. Si no ves
+        tus productos, revisá que estés en el perfil correcto (Mamá / Papá).
       </p>
     </div>
   );
